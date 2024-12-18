@@ -21,11 +21,14 @@ bool lowBattery() {
   if (currentTime > uptime) {
     uptime = currentTime;
     int voltage = analogRead(VOLTAGE_DETECTION_PIN);
-    if (voltage < LOW_VOLTAGE && (voltage == lastVoltage || uptime < 2)) {  //if battery voltage < threshold, it needs to be recharged
+    if (voltage < LOW_VOLTAGE && (voltage == lastVoltage || uptime < 2)) {  // if the battery still holds charges but fluctuates during moving, it will only alarm for the first two times
+                                                                            //if battery voltage < threshold, it needs to be recharged
       //give the robot a break when voltage drops after sprint
       //adjust the thresholds according to your batteries' voltage
       //if set too high, the robot will stop working when the battery still has power.
       //If too low, the robot may not alarm before the battery shuts off
+
+
       PTF("Low power:");
       PT(voltage / 99);
       PTL('V');
@@ -45,7 +48,6 @@ bool lowBattery() {
       //        bStep = -1;
       //      delay(5);
       //    }
-      delay(2000);
       lastVoltage = voltage;
       return true;
     }
@@ -193,7 +195,7 @@ void reaction() {
           else {  // turn on the manual color mode
             manualEyeColorQ = true;
             long color = ((long)(uint8_t(newCmd[0])) << 16) + ((long)(uint8_t(newCmd[1])) << 8) + (long)(uint8_t(newCmd[2]));
-            mRUS04.SetRgbEffect(E_RGB_INDEX(uint8_t(newCmd[3])), color, uint8_t(newCmd[4]));
+            ultrasonic.SetRgbEffect(E_RGB_INDEX(uint8_t(newCmd[3])), color, uint8_t(newCmd[4]));
           }
           break;
         }
@@ -319,16 +321,18 @@ void reaction() {
 
 #ifdef T_TUNER
               else if (token == T_TUNER) {
-                *par[target[0]] = target[1];
-                PT(target[0]);
-                PT('\t');
-                PTL(target[1]);
+                if (inLen > 1) {
+                  *par[target[0]] = target[1];
+                  PT(target[0]);
+                  PT('\t');
+                  PTL(target[1]);
+                }
               }
 #endif
             } while (pch != NULL);
 #ifdef T_TUNER
             if (token == T_TUNER) {
-              for (byte p = 0; p < 6; p++) {
+              for (byte p = 0; p < sizeof(initPars) / sizeof(int8_t); p++) {
                 PT(*par[p]);
                 PT('\t');
               }
@@ -402,6 +406,27 @@ void reaction() {
               transform(targetFrame, 1, 4);  // if (token == T_INDEXED_SEQUENTIAL_BIN) it will be useless
               skill.convertTargetToPosture(targetFrame);
             }
+          }
+          break;
+        }
+      case EXTENSION:
+        {
+          switch (newCmd[0]) {
+#ifdef VOICE
+            case EXTENSION_VOICE:
+              {
+                set_voice();
+                break;
+              }
+#endif
+#ifdef GROVE_SERIAL_PASS_THROUGH
+            case EXTENSION_ULTRASONIC:
+              {
+                PT('=');
+                PTL(readUltrasonic((int8_t)newCmd[1], (int8_t)newCmd[2]));
+                break;
+              }
+#endif
           }
           break;
         }

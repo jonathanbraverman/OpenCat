@@ -1,4 +1,4 @@
-#define SOFTWARE_VERSION "N_240219"  //NyBoard + YYMMDD
+#define SOFTWARE_VERSION "N_240907"  //NyBoard + YYMMDD
 //board configuration
 // -- comment out these blocks to save program space for your own codes --
 #define BUZZER 5
@@ -9,12 +9,6 @@
 #define SERIAL_TIMEOUT 5
 #define SERIAL_TIMEOUT_LONG 200
 //Tutorial: https://bittle.petoi.com/11-tutorial-on-creating-new-skills
-#ifdef NYBBLE
-#include "InstinctNybble.h"
-#elif defined BITTLE
-#include "InstinctBittle.h"
-//#include "InstinctBittleShortExample.h"
-#endif
 
 #define DOF 16
 
@@ -25,7 +19,7 @@ int8_t middleShift[] = { 0, 15, 0, 0,
                          -30, -30, 30, 30 };
 int angleLimit[][2] = {
   { -120, 120 },
-  { -80, 90 },
+  { -80, 45 },
   { -120, 120 },
   { -120, 120 },
   { -90, 60 },
@@ -42,13 +36,17 @@ int angleLimit[][2] = {
   { -120, 60 },
 };
 #elif defined BITTLE
-int8_t middleShift[] = { 0, 15, 0, 0,
+int8_t middleShift[] = { 0, -90, 0, 0,
                          -45, -45, -45, -45,
                          55, 55, -55, -55,
                          -55, -55, -55, -55 };
 int angleLimit[][2] = {
   { -120, 120 },
-  { -30, 80 },
+#ifdef ROBOT_ARM
+  { -10, 180 },
+#else
+  { -85, 85 },
+#endif
   { -120, 120 },
   { -120, 120 },
   { -90, 60 },
@@ -90,7 +88,7 @@ int angleLimit[][2] = {
 #endif
 
 // #define INVERSE_SERVO_DIRECTION
-int8_t rotationDirection[] = { 1, -1, 1, 1,
+int8_t rotationDirection[] = { 1, -1, -1, 1,
                                1, -1, 1, -1,
                                1, -1, -1, 1,
                                -1, 1, 1, -1 };
@@ -161,15 +159,27 @@ byte pwm_pin[] = { 12, 11, 4, 3,
 #define WALKING_DOF 8
 #define REGULAR G41
 #define KNEE G41
+#include "InstinctNybble.h"
+
 
 #elif defined BITTLE
+#ifdef ROBOT_ARM
+#define MODEL "Bittle RN"
+#else
 #define MODEL "Bittle"
+#endif
 #define HEAD
+#define TAIL  // the robot arm's clip is assigned to the tail joint
 #define LL_LEG
 #define WALKING_DOF 8
 #define REGULAR P1S
 #define KNEE P1S
-
+#ifdef ROBOT_ARM
+#include "InstinctBittle_arm.h"
+#else
+#include "InstinctBittle.h"
+#endif
+//#include "InstinctBittleShortExample.h"
 #endif
 
 //on-board EEPROM addresses
@@ -203,7 +213,7 @@ byte pwm_pin[] = { 12, 11, 4, 3,
 
 //token list
 #define T_ABORT 'a'      //abort the calibration values
-#define T_BEEP 'b'       //b note1 duration1 note2 duration2 ... e.g. b12 8 14 8 16 8 17 8 19 4
+#define T_BEEP 'b'       //b note1 duration1 note2 duration2 ... e.g. b12 8 14 8 16 8 17 8 19 4 \
                          //a single 'b' will toggle the melody on/off
 #define T_CALIBRATE 'c'  //send the robot to calibration posture for attaching legs and fine-tuning the joint offsets. \
                          //c jointIndex1 offset1 jointIndex2 offset2 ... e.g. c0 7 1 -4 2 3 8 5
@@ -243,13 +253,15 @@ byte pwm_pin[] = { 12, 11, 4, 3,
 #define BINARY_COMMAND  //disable the binary commands to save space for the simple random demo
 
 #ifdef BINARY_COMMAND
-#define T_BEEP_BIN 'B'  //B note1 duration1 note2 duration2 ... e.g. B12 8 14 8 16 8 17 8 19 4
-#define T_LISTED_BIN 'L'         //a list of the DOFx joint angles: angle0 angle1 angle2 ... angle15
+#define T_BEEP_BIN 'B'    //B note1 duration1 note2 duration2 ... e.g. B12 8 14 8 16 8 17 8 19 4
+#define T_LISTED_BIN 'L'  //a list of the DOFx joint angles: angle0 angle1 angle2 ... angle15
 // #define T_SERVO_MICROSECOND 'w'  //PWM width modulation
 #define T_TEMP 'T'  //call the last 'K' skill data received from the serial port
 #endif
 
-// #define T_TUNER '}'
+#define EXTENSION 'X'
+#define EXTENSION_VOICE 'A'
+#define EXTENSION_ULTRASONIC 'U'
 
 
 float degPerRad = 180.0 / M_PI;
@@ -293,11 +305,10 @@ float currentAdjust[DOF] = {};
 #define IDLE_TIME 3000
 long idleTimer = 0;
 int randomInterval = 2000;
-#define CHECK_BATTERY_PERIOD 5000  //every 10 seconds. 60 mins -> 3600 seconds
+#define CHECK_BATTERY_PERIOD 10000  //every 10 seconds. 60 mins -> 3600 seconds
 int uptime = -1;
 int frame = 0;
 byte tStep = 1;
-int **par = new int *[8];
 
 char token;
 char lowerToken;
@@ -331,7 +342,7 @@ bool fineAdjust = true;
 bool gyroBalanceQ = true;
 bool printGyro = false;
 bool walkingQ = false;
-bool serialDominateQ = false;
+// bool serialDominateQ = false;
 bool manualHeadQ = false;
 bool nonHeadJointQ = false;
 bool hardServoQ = true;
@@ -412,6 +423,7 @@ float protectiveShift;  //reduce the wearing of the potentiometer
 #elif defined DOUBLE_INFRARED_DISTANCE
 #include "doubleInfraredDistance.h"
 #elif defined GROVE_SERIAL_PASS_THROUGH
+#include "ultrasonic.h"
 #elif defined OTHER_MODULES
 #elif defined ALL_RANDOM
 #else
@@ -431,7 +443,6 @@ float protectiveShift;  //reduce the wearing of the potentiometer
 
 #ifdef GROVE_SERIAL_PASS_THROUGH
 #undef IR_PIN
-#undef BUZZER
 #endif
 
 #include "skill.h"
@@ -488,9 +499,20 @@ void initRobot() {
 #ifdef GESTURE
   gestureSetup();
 #endif
+
+#if defined DOUBLE_LIGHT || defined DOUBLE_TOUCH || defined DOUBLE_INFRARED_DISTANCE || defined ULTRASONIC
+#ifndef GROVE_SERIAL_PASS_THROUGH
+  skill.loadFrame("sit");  //required by double light
+  delay(500);              //use your palm to cover the two light sensors for calibration
+#endif
+#ifdef DOUBLE_INFRARED_DISTANCE
+  doubleInfraredDistanceSetup();
+#endif
 #ifdef DOUBLE_LIGHT
   doubleLightSetup();
 #endif
+#endif
+
 #ifdef GYRO_PIN
   for (byte r = 0; r < 50; r++) {  //ypr is slow when starting up. leave enough time between IMU initialization and this reading
     read_IMU();
@@ -507,14 +529,7 @@ void initRobot() {
   allCalibratedPWM(currentAng);  //soft boot for servos
   delay(500);
   lastCmd[0] = '\0';
-#if defined DOUBLE_LIGHT || defined DOUBLE_TOUCH || defined DOUBLE_INFRARED_DISTANCE
-#ifdef DOUBLE_INFRARED_DISTANCE
-  doubleInfraredDistanceSetup();
-#endif
-  skill.loadFrame("sit");  //required by double light
-  delay(500);              //use your palm to cover the two light sensors for calibration
-#endif
-  //----------------------------------
+//----------------------------------
 #else  // ** save parameters to device's static memory
   configureEEPROM();
   servoSetup();  //servo needs to be after configureEEPROM and before imuSetup

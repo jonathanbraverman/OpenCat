@@ -27,9 +27,20 @@ SoftwareSerial Serial2(8, 9);  //Rx, Tx
 // 下列行为是程序中预设的，您可以用技能创作坊设计新技能并导入到 InstinctX.h
 // 支持其他的串口指令，比如活动关节和旋律
 
-const char voice1[] PROGMEM = "T";  //call the last skill data sent by the Skill Composer ## Will cause bug when skill is longer than 5 frames
+#ifdef ROBOT_ARM
+const char voice1[] PROGMEM = "kpickUpL";     //捡起来
+const char voice2[] PROGMEM = "kputDownL";    //放下
+const char voice3[] PROGMEM = "kshowOff";     //展示
+const char voice4[] PROGMEM = "khuntL";       //捕猎
+const char voice5[] PROGMEM = "kputAwayL";    //收起来
+const char voice6[] PROGMEM = "kthrowAwayL";  //丢出去
+const char voice7[] PROGMEM = "klaunchL";     //发射
+const char voice8[] PROGMEM = "kclapL";       //鼓掌
+const char voice9[] PROGMEM = "ktossL";       //抛出去
+#else
+const char voice1[] PROGMEM = "T";                                    //call the last skill data sent by the Skill Composer ## Will cause bug when skill is longer than 5 frames
 #ifdef BITTLE
-const char voice2[] PROGMEM = "kpu1";  //单手俯卧撑	 single-handed pushups
+const char voice2[] PROGMEM = "kpu1";                                 //单手俯卧撑	 single-handed pushups
 #elif defined NYBBLE
 const char voice2[] PROGMEM = "kwsf";  //洗脸	  wash face
 #endif
@@ -40,6 +51,7 @@ const char voice6[] PROGMEM = "6th";
 const char voice7[] PROGMEM = "7th";
 const char voice8[] PROGMEM = "8th";
 const char voice9[] PROGMEM = "9th";
+#endif
 const char voice10[] PROGMEM = "10th";
 const char *const voiceTable[] PROGMEM = {
   voice1,
@@ -65,35 +77,34 @@ void voiceSetup() {
   PTL(listLength);
 }
 
+void set_voice() {  // send some control command directly to the module
+                    // XAa: switch English
+                    // XAb: switch Chinese
+                    // XAc: turn on the sound response
+                    // XAd: turn off the sound response
+                    // XAe: start learning
+                    // XAf: stop learning
+                    // XAg: clear the learning data
+  byte c = 0;
+  while (newCmd[c++] != '~')
+    ;
+  newCmd[c - 1] = '\0';
+  // Serial.print('X');
+  // Serial.println(newCmd);
+  Serial2.print('X');
+  Serial2.println(newCmd);
+  while (Serial2.available() && Serial2.read())
+    ;
+  if (!strcmp(newCmd, "Ac"))  // enter "XAc" in the serial monitor or add button "X65,99" in the mobile app to enable voice reactions
+                              // 在串口监视器输入指令“XAc”或在手机app创建按键"X65,99"来激活语音动作
+    enableVoiceQ = true;
+  else if (!strcmp(newCmd, "Ad"))  // enter "XAd" in the serial monitor or add button "X65,100" in the mobile app to disable voice reactions
+                                   // 在串口监视器输入指令“XAd”或在手机app创建按键"X65,100"来禁用语音动作
+    enableVoiceQ = false;
+  PTL(token);
+  resetCmd();
+}
 void read_voice() {
-  if (token == 'X' && newCmd[0] == 'A') {  // send some control command directly to the module
-                                           // XAa: switch English
-                                           // XAb: switch Chinese
-                                           // XAc: turn on the sound response
-                                           // XAd: turn off the sound response
-                                           // XAe: start learning
-                                           // XAf: stop learning
-                                           // XAg: clear the learning data
-    byte c = 0;
-    while (newCmd[c++] != '~')
-      ;
-    newCmd[c - 1] = '\0';
-    // Serial.print('X');
-    // Serial.println(newCmd);
-    Serial2.print('X');
-    Serial2.println(newCmd);
-    while (Serial2.available() && Serial2.read())
-      ;
-    if (!strcmp(newCmd, "Ac"))  // enter "XAc" in the serial monitor or add button "X65,99" in the mobile app to enable voice reactions
-                                // 在串口监视器输入指令“XAc”或在手机app创建按键"X65,99"来激活语音动作
-      enableVoiceQ = true;
-    else if (!strcmp(newCmd, "Ad"))  // enter "XAd" in the serial monitor or add button "X65,100" in the mobile app to disable voice reactions
-                                     // 在串口监视器输入指令“XAd”或在手机app创建按键"X65,100"来禁用语音动作
-      enableVoiceQ = false;
-    PTL(token);
-    resetCmd();
-  }
-
   if (Serial2.available()) {
     String raw = Serial2.readStringUntil('\n');
     // PTL(raw);
